@@ -1,0 +1,3 @@
+# Store and check out everything with LF: scripts and manifests run on Linux.
+* text=auto eol=lf
+*.png binary

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IacDemo tenant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <main>
+        <h1>IacDemo</h1>
+        <p class="lead">Multi-tenant workload on Amazon EKS</p>
+        <dl>
+            <dt>Tenant</dt>
+            <dd id="tenant">…</dd>
+            <dt>API version</dt>
+            <dd id="version">…</dd>
+            <dt>Served by pod</dt>
+            <dd id="pod">…</dd>
+        </dl>
+        <p id="error" class="error" hidden>API unreachable</p>
+    </main>
+    <script src="app.js"></script>
+</body>
+
+</html>

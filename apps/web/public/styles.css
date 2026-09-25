@@ -1,0 +1,42 @@
+:root {
+    --bg: #f8fafc;
+    --fg: #0f172a;
+    --muted: #475569;
+    --accent: #0f2d59;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+}
+
+main {
+    max-width: 32rem;
+    margin: 4rem auto;
+    padding: 0 1rem;
+}
+
+h1 {
+    color: var(--accent);
+    margin-bottom: 0;
+}
+
+.lead {
+    color: var(--muted);
+}
+
+dt {
+    font-weight: 600;
+    margin-top: 1rem;
+}
+
+dd {
+    margin: 0;
+    font-family: ui-monospace, monospace;
+}
+
+.error {
+    color: #b91c1c;
+}

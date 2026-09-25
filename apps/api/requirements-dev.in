@@ -1,0 +1,4 @@
+# Test dependencies. Compile with:
+#   pip-compile --generate-hashes --output-file=requirements-dev.txt requirements-dev.in
+-r requirements.in
+pytest
