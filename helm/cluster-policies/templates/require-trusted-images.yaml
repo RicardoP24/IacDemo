@@ -1,0 +1,26 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-trusted-images
+  annotations:
+    policies.kyverno.io/title: Require trusted, immutable images
+    policies.kyverno.io/description: >-
+      Tenant workloads may only run images from the project's ECR registry,
+      referenced by digest (no mutable tags such as :latest).
+spec:
+  validationActions: {{ toJson .Values.validationActions }}
+  matchConstraints:
+    {{- include "cluster-policies.tenantPods" . | nindent 4 }}
+  variables:
+    - name: images
+      expression: >-
+        (object.spec.containers +
+        object.spec.?initContainers.orValue([]) +
+        object.spec.?ephemeralContainers.orValue([])).map(c, c.image)
+  validations:
+    - expression: >-
+        variables.images.all(image, image.startsWith('{{ required "trustedRegistry is required" .Values.trustedRegistry }}/'))
+      message: "Images must come from the trusted registry {{ .Values.trustedRegistry }}."
+    - expression: >-
+        variables.images.all(image, image.contains('@sha256:'))
+      message: "Images must be referenced by digest (image@sha256:...), not by tag."

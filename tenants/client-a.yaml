@@ -1,0 +1,2 @@
+# Tenant values: only what differs from helm/tenant-app/values.yaml.
+tenant: client-a

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cluster-policies
+description: Kyverno admission policies (supply chain + resources) for tenant namespaces
+type: application
+version: 0.1.0

@@ -1,0 +1,34 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify cosign signatures
+    policies.kyverno.io/description: >-
+      Only images signed by the CI pipeline (cosign key held in Jenkins) can be
+      admitted into tenant namespaces.
+spec:
+  validationActions: {{ toJson .Values.validationActions }}
+  webhookConfiguration:
+    timeoutSeconds: 15
+  matchConstraints:
+    {{- include "cluster-policies.tenantPods" . | nindent 4 }}
+  matchImageReferences:
+    - glob: "{{ .Values.trustedRegistry }}/*"
+  # Kyverno pulls signatures from ECR with its Pod Identity role (read-only).
+  credentials:
+    providers: ["amazon"]
+  attestors:
+    - name: cosign
+      cosign:
+        key:
+          data: |
+            {{- required "cosignPublicKey is required" .Values.cosignPublicKey | nindent 12 }}
+        # Signatures are not uploaded to the public Rekor log (private images).
+        ctlog:
+          insecureIgnoreTlog: true
+          insecureIgnoreSCT: true
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.cosign])).all(e, e > 0)
+      message: "Image signature verification failed: images must be signed by the CI pipeline."

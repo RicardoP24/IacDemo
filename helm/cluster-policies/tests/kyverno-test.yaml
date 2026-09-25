@@ -1,0 +1,32 @@
+# Run:  helm template cluster-policies helm/cluster-policies \
+#         --set trustedRegistry=123456789012.dkr.ecr.eu-west-3.amazonaws.com --set cosignPublicKey=unused \
+#         --show-only templates/require-trusted-images.yaml --show-only templates/require-resources.yaml \
+#         > helm/cluster-policies/tests/rendered-policies.yaml
+#       kyverno test helm/cluster-policies/tests
+# Signature verification needs a registry, so it is exercised in the cluster, not here.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: tenant-admission-policies
+policies:
+  - rendered-policies.yaml
+resources:
+  - resources.yaml
+variables: values.yaml
+results:
+  - policy: require-trusted-images
+    resources: [compliant, no-resources]
+    kind: Pod
+    result: pass
+  - policy: require-trusted-images
+    resources: [untrusted-registry, mutable-tag]
+    kind: Pod
+    result: fail
+  - policy: require-requests-limits
+    resources: [compliant, untrusted-registry, mutable-tag]
+    kind: Pod
+    result: pass
+  - policy: require-requests-limits
+    resources: [no-resources]
+    kind: Pod
+    result: fail

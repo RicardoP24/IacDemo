@@ -1,0 +1,49 @@
+# Test fixtures for the admission policies (run by the pipeline with the Kyverno CLI).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant
+  namespace: client-a
+spec:
+  containers:
+    - name: api
+      image: 123456789012.dkr.ecr.eu-west-3.amazonaws.com/iacdemo/api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untrusted-registry
+  namespace: client-a
+spec:
+  containers:
+    - name: web
+      image: docker.io/library/nginx@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mutable-tag
+  namespace: client-a
+spec:
+  containers:
+    - name: api
+      image: 123456789012.dkr.ecr.eu-west-3.amazonaws.com/iacdemo/api:latest
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-resources
+  namespace: client-a
+spec:
+  containers:
+    - name: api
+      image: 123456789012.dkr.ecr.eu-west-3.amazonaws.com/iacdemo/api@sha256:0000000000000000000000000000000000000000000000000000000000000000

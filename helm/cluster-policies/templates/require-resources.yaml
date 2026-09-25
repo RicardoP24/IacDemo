@@ -1,0 +1,20 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require CPU/memory requests and memory limits
+    policies.kyverno.io/description: >-
+      Noisy-neighbour protection between tenants sharing the same nodes: every
+      container must declare CPU and memory requests and a memory limit.
+spec:
+  validationActions: {{ toJson .Values.validationActions }}
+  matchConstraints:
+    {{- include "cluster-policies.tenantPods" . | nindent 4 }}
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          has(c.resources) &&
+          has(c.resources.requests) && 'cpu' in c.resources.requests && 'memory' in c.resources.requests &&
+          has(c.resources.limits) && 'memory' in c.resources.limits)
+      message: "Every container needs cpu/memory requests and a memory limit."

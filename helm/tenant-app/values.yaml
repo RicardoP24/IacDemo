@@ -1,0 +1,54 @@
+# -- Tenant name. Also used as the URL path prefix (/<tenant>/) on the shared ALB.
+tenant: ""
+
+# -- Registry hosting the images, e.g. 123456789012.dkr.ecr.eu-west-3.amazonaws.com
+imageRegistry: ""
+
+# -- Version shown by the API (the pipeline sets the git commit).
+appVersion: dev
+
+api:
+  image:
+    repository: iacdemo/api
+    # -- Image digest (sha256:...). Workloads are pinned by digest, never by tag.
+    digest: ""
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+web:
+  image:
+    repository: iacdemo/web
+    digest: ""
+  replicas: 2
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi
+
+autoscaling:
+  enabled: true
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  # -- All tenants join the same IngressGroup, so they share a single ALB.
+  groupName: iacdemo-tenants
+  inboundCidrs: "0.0.0.0/0"
+  # -- ARN of the AWS WAFv2 web ACL attached to the ALB (Terraform output).
+  wafAclArn: ""
+  # -- ACM certificate ARN. When set, the ALB listens on 443 and redirects 80 -> 443.
+  certificateArn: ""
+
+networkPolicy:
+  # -- CIDRs the ALB sends traffic from (the public subnets). Only these may reach the web pods.
+  albSourceCidrs: []

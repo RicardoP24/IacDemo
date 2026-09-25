@@ -1,0 +1,9 @@
+# Tenant values: only what differs from helm/tenant-app/values.yaml.
+# client-e has more traffic, so it gets a higher baseline and ceiling.
+tenant: client-e
+api:
+  replicas: 3
+web:
+  replicas: 3
+autoscaling:
+  maxReplicas: 6

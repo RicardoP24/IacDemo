@@ -1,0 +1,55 @@
+{{- /*
+The namespace already has default-deny (ingress + egress) and allow-DNS policies,
+created by Terraform (terraform/platform/tenants.tf). These policies open only the
+flows this workload needs:  ALB -> web -> api.
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant-app.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        {{- range (required "networkPolicy.albSourceCidrs is required" .Values.networkPolicy.albSourceCidrs) }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant-app.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: web
+      ports:
+        - protocol: TCP
+          port: 8080

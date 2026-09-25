@@ -1,0 +1,11 @@
+# -- Only images from this registry may run in tenant namespaces (ECR registry host).
+trustedRegistry: ""
+
+# -- Cosign public key (PEM) used to verify image signatures.
+cosignPublicKey: ""
+
+# -- Deny = block at admission; Audit = only report.
+validationActions: ["Deny"]
+
+# -- Policies apply to namespaces carrying this label (set by Terraform on every tenant namespace).
+tenantLabel: iacdemo.io/tenant

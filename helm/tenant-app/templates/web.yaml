@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant-app.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant-app.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant-app.labels" . | nindent 4 }}
+    app.kubernetes.io/name: web
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.web.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        {{- include "tenant-app.labels" . | nindent 8 }}
+        app.kubernetes.io/name: web
+    spec:
+      serviceAccountName: web
+      automountServiceAccountToken: false
+      # nginx-unprivileged supports arbitrary UIDs; a high UID avoids overlap with host users.
+      securityContext:
+        runAsUser: 10101
+        runAsGroup: 10101
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: web
+      containers:
+        - name: web
+          image: {{ include "tenant-app.image" (dict "root" . "image" .Values.web.image "component" "web") }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TENANT
+              value: {{ include "tenant-app.tenant" . | quote }}
+            - name: API_UPSTREAM
+              value: "api:8080"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            exec:
+              command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "tenant-app.containerSecurityContext" . | nindent 12 }}
+          # Read-only root filesystem: nginx needs writable dirs for the rendered
+          # config (envsubst output), the pid file and temp files.
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: conf
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
