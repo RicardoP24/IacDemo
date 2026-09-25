@@ -1,0 +1,54 @@
+# Local Jenkins stack:  controller (JCasC)  ->  SSH agent (toolchain)  ->  DinD (mutual TLS)
+# Run ./setup.sh once, then: docker compose up -d --build
+name: iacdemo-jenkins
+
+services:
+  controller:
+    build: ./controller
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080" # UI bound to localhost only
+    environment:
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?run ./setup.sh first}
+    secrets:
+      - agent_ssh_key
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    depends_on:
+      - agent
+
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    environment:
+      JENKINS_AGENT_SSH_PUBKEY: ${AGENT_SSH_PUBKEY:?run ./setup.sh first}
+    volumes:
+      - docker_certs_client:/certs/client:ro
+      - agent_workspace:/home/jenkins/agent
+    depends_on:
+      - docker
+
+  # Docker-in-Docker: image builds and the ZAP scan run here, isolated from the host daemon.
+  docker:
+    image: docker:29.8-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
+    restart: unless-stopped
+    privileged: true # required by DinD itself
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - docker_certs_ca:/certs/ca
+      - docker_certs_client:/certs/client
+      - docker_data:/var/lib/docker
+      # Same path as on the agent, so `docker run -v $WORKSPACE/...` resolves inside DinD.
+      - agent_workspace:/home/jenkins/agent
+
+secrets:
+  agent_ssh_key:
+    file: ./secrets/agent_ssh_key
+
+volumes:
+  jenkins_home:
+  agent_workspace:
+  docker_certs_ca:
+  docker_certs_client:
+  docker_data:

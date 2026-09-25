@@ -1,0 +1,15 @@
+# Resolved to the latest versions compatible with the pinned Jenkins LTS.
+# For reproducible builds, pin them (jenkins-plugin-cli --list writes the resolved versions).
+configuration-as-code
+job-dsl
+workflow-aggregator
+git
+ssh-slaves
+credentials-binding
+aws-credentials
+timestamper
+ansicolor
+ws-cleanup
+junit
+warnings-ng
+htmlpublisher

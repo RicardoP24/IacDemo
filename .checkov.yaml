@@ -1,0 +1,10 @@
+# Checkov settings shared by the pipeline and local runs.
+# Individual exceptions are declared inline (# checkov:skip=...) next to the resource, with a reason.
+compact: true
+quiet: true
+skip-path:
+  - \.terraform
+  - \.venv
+skip-check:
+  # Registry modules are pinned by version constraint; commit-hash pinning applies to git sources only.
+  - CKV_TF_1
