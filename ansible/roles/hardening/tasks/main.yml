@@ -1,0 +1,25 @@
+---
+- name: Check that the host is supported
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+      - ansible_facts['distribution_major_version'] | int == 9
+    fail_msg: This role targets RHEL 9 family hosts (RHEL, Rocky Linux, AlmaLinux, Oracle Linux).
+    quiet: true
+
+- name: Harden SSH
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Configure the host firewall
+  ansible.builtin.import_tasks: firewall.yml
+  when: hardening_firewall
+
+- name: Apply kernel and network parameters
+  ansible.builtin.import_tasks: sysctl.yml
+
+- name: Configure audit rules
+  ansible.builtin.import_tasks: audit.yml
+
+- name: Enable automatic security updates
+  ansible.builtin.import_tasks: updates.yml
+  when: hardening_security_updates

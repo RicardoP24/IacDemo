@@ -1,0 +1,29 @@
+---
+# Docker Engine from Docker's RPM repository. The signing key is only trusted if its
+# fingerprint matches the one published in Docker's installation guide.
+docker_gpg_key_url: https://download.docker.com/linux/centos/gpg
+docker_gpg_key_fingerprint: 060A 61C5 1B55 8A7F 742B 77AA C52F EB6B 621E 9F35
+docker_repo_distro: "{{ 'rhel' if ansible_facts['distribution'] == 'RedHat' else 'centos' }}"
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Packages that conflict with Docker Engine on RHEL 9 (Docker's installation guide).
+docker_conflicting_packages: [podman, podman-docker, runc]
+
+# /etc/docker/daemon.json
+docker_daemon_config:
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "3"
+  live-restore: true # containers keep running while the daemon restarts or upgrades
+  no-new-privileges: true # setuid binaries cannot raise privileges inside containers
+  userland-proxy: false
+
+# false = deploy the audit rules without loading them (used by the container-based tests).
+docker_audit_rules_load: true

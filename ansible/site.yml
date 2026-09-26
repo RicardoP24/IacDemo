@@ -1,0 +1,13 @@
+---
+# Provisions the Jenkins host: a hardened RHEL 9 server (RHEL, Rocky, AlmaLinux or
+# Oracle Linux) running Docker Engine and the Jenkins stack from ../jenkins.
+#
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook site.yml
+- name: Provision the Jenkins host
+  hosts: jenkins
+  become: true
+  roles:
+    - role: hardening
+    - role: docker
+    - role: jenkins_stack

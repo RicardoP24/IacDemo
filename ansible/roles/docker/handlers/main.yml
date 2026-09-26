@@ -1,0 +1,10 @@
+---
+- name: Restart docker
+  ansible.builtin.systemd_service:
+    name: docker
+    state: restarted
+
+- name: Load Docker audit rules
+  ansible.builtin.command: augenrules --load
+  changed_when: true
+  when: docker_audit_rules_load

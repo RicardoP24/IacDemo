@@ -1,0 +1,6 @@
+## IacDemo: changes to Docker's configuration and every use of the Docker CLI.
+## Membership of the docker group equals root on this host, so it is audited too.
+-w /etc/docker/ -p wa -k docker_config
+-w /usr/lib/systemd/system/docker.service -p wa -k docker_config
+-w /usr/bin/docker -p x -k docker_cli
+-w /usr/bin/dockerd -p x -k docker_daemon

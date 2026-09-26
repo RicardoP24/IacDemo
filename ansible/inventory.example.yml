@@ -1,0 +1,11 @@
+---
+# Copy to inventory.yml (git-ignored) and point it at your RHEL 9 host.
+# The user needs sudo and an SSH key: the hardening role turns password logins off.
+all:
+  children:
+    jenkins:
+      hosts:
+        jenkins-01:
+          ansible_host: 203.0.113.10
+          ansible_user: ricardo
+          hardening_ssh_allow_users: [ricardo]

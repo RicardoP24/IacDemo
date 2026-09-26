@@ -1,0 +1,10 @@
+---
+# Where the Jenkins stack (../jenkins in this repository) is installed on the host.
+jenkins_stack_dir: /opt/iacdemo/jenkins
+
+# Parts of ../jenkins copied to the host. Local secrets (.env, secrets/) are never copied:
+# they are generated on the host itself.
+jenkins_stack_files: [docker-compose.yml, setup.sh, controller, agent]
+
+# false = stop before building and starting the containers (used by the container-based tests).
+jenkins_stack_start: true

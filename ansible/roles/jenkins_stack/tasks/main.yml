@@ -1,0 +1,45 @@
+---
+- name: Install the tools used to generate the Jenkins secrets
+  ansible.builtin.dnf:
+    name: [openssh, openssl]
+    state: present
+
+- name: Create the Jenkins stack directory
+  ansible.builtin.file:
+    path: "{{ jenkins_stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Copy the Jenkins stack (compose file, controller and agent images)
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../../jenkins/{{ item }}"
+    dest: "{{ jenkins_stack_dir }}/"
+    owner: root
+    group: root
+    mode: u=rwX,g=rX,o=
+  loop: "{{ jenkins_stack_files }}"
+
+# Same script as a local install: agent SSH key pair + random admin password in .env (0600).
+# no_log: the script prints the admin password.
+- name: Generate the agent SSH key and the admin password (first run only)
+  ansible.builtin.command: bash setup.sh
+  args:
+    chdir: "{{ jenkins_stack_dir }}"
+    creates: "{{ jenkins_stack_dir }}/.env"
+  no_log: true
+
+- name: Build and start Jenkins (controller, SSH agent, Docker-in-Docker)
+  community.docker.docker_compose_v2:
+    project_src: "{{ jenkins_stack_dir }}"
+    build: policy
+    state: present
+  when: jenkins_stack_start
+
+- name: Show how to reach Jenkins
+  ansible.builtin.debug:
+    msg: >-
+      Jenkins listens on 127.0.0.1:8080 only. Open a tunnel with
+      'ssh -L 8080:127.0.0.1:8080 <user>@{{ inventory_hostname }}' and browse http://localhost:8080.
+      The admin password is in {{ jenkins_stack_dir }}/.env (readable by root only).

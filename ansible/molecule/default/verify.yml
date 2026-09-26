@@ -1,0 +1,71 @@
+---
+- name: Verify the Jenkins host
+  hosts: jenkins
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the effective SSH configuration
+      ansible.builtin.command: sshd -T
+      register: verify_sshd
+      changed_when: false
+
+    - name: SSH accepts keys only, refuses root and allows local tunnels only
+      ansible.builtin.assert:
+        that:
+          - "'permitrootlogin no' in verify_sshd.stdout_lines"
+          - "'passwordauthentication no' in verify_sshd.stdout_lines"
+          - "'authenticationmethods publickey' in verify_sshd.stdout_lines"
+          - "'allowtcpforwarding local' in verify_sshd.stdout_lines"
+          - "'x11forwarding no' in verify_sshd.stdout_lines"
+
+    - name: List the services open in the firewall
+      ansible.builtin.command: firewall-cmd --list-services
+      register: verify_firewall
+      changed_when: false
+      when: hardening_firewall | default(true)
+
+    - name: Only SSH is open
+      ansible.builtin.assert:
+        that: verify_firewall.stdout.split() == ['ssh']
+      when: hardening_firewall | default(true)
+
+    - name: Read the Docker daemon state
+      ansible.builtin.command: docker info --format json
+      register: verify_docker
+      changed_when: false
+
+    - name: Docker runs with live-restore and the hardened configuration
+      ansible.builtin.assert:
+        that:
+          - (verify_docker.stdout | from_json)['LiveRestoreEnabled']
+          - (verify_docker.stdout | from_json)['LoggingDriver'] == 'json-file'
+
+    - name: Read the hardening files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: verify_files
+      loop:
+        - /etc/sysctl.d/60-iacdemo-hardening.conf
+        - /etc/audit/rules.d/50-iacdemo.rules
+        - /etc/audit/rules.d/60-docker.rules
+        - /opt/iacdemo/jenkins/.env
+        - /opt/iacdemo/jenkins/secrets/agent_ssh_key
+
+    - name: Hardening files exist and the Jenkins secrets are private
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.item is not search('jenkins') or item.stat.mode == '0600'
+        fail_msg: "{{ item.item }} is missing or too permissive"
+      loop: "{{ verify_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read the security update timer
+      ansible.builtin.systemd_service:
+        name: dnf-automatic.timer
+      register: verify_timer
+
+    - name: Security updates are scheduled
+      ansible.builtin.assert:
+        that: verify_timer.status.UnitFileState == 'enabled'

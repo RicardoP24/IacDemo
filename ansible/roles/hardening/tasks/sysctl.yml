@@ -1,0 +1,20 @@
+---
+- name: Create the sysctl drop-in directory
+  ansible.builtin.file:
+    path: /etc/sysctl.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Set kernel and network parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/60-iacdemo-hardening.conf
+    sysctl_set: "{{ hardening_sysctl_apply }}"
+    reload: "{{ hardening_sysctl_apply }}"
+    state: present
+  loop: "{{ hardening_sysctl | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

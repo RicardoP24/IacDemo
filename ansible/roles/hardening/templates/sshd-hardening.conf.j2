@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+PermitRootLogin no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+X11Forwarding no
+AllowAgentForwarding no
+PermitTunnel no
+# The Jenkins UI listens on 127.0.0.1 only: ssh -L 8080:127.0.0.1:8080 <user>@<host>
+AllowTcpForwarding local
+{% if hardening_ssh_allow_users | length > 0 %}
+AllowUsers {{ hardening_ssh_allow_users | join(' ') }}
+{% endif %}

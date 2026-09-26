@@ -1,0 +1,21 @@
+---
+- name: Install auditd
+  ansible.builtin.dnf:
+    name: audit
+    state: present
+
+- name: Deploy the audit rules
+  ansible.builtin.copy:
+    src: iacdemo.rules
+    dest: /etc/audit/rules.d/50-iacdemo.rules
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Load audit rules
+
+- name: Enable and start auditd
+  ansible.builtin.systemd_service:
+    name: auditd
+    enabled: true
+    state: started
+  when: hardening_auditd_service

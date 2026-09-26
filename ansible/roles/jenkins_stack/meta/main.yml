@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: jenkins_stack
+  author: Ricardo Pilartes da Silva
+  description: Deploys the IacDemo Jenkins stack (JCasC controller, SSH agent, Docker-in-Docker)
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: EL
+      versions: ["9"]
+dependencies: []

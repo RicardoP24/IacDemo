@@ -1,0 +1,33 @@
+---
+# SSH: key-only logins, no root. Jenkins' UI stays on 127.0.0.1 and is reached through
+# an SSH tunnel (ssh -L 8080:127.0.0.1:8080 ...), so only local port forwarding is allowed.
+hardening_ssh_allow_users: [] # e.g. [ricardo]; empty = any non-root user with an authorized key
+
+# Host firewall: only SSH is reachable from the network.
+hardening_firewall: true
+hardening_firewall_services: [ssh]
+hardening_firewall_removed_services: [cockpit, dhcpv6-client] # opened by default on RHEL 9
+
+# Kernel and network parameters (CIS-style). IP forwarding stays on: Docker needs it.
+# false = only write /etc/sysctl.d (used by the container-based tests).
+hardening_sysctl_apply: true
+hardening_sysctl:
+  kernel.kptr_restrict: 2
+  kernel.dmesg_restrict: 1
+  fs.suid_dumpable: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.tcp_syncookies: 1
+
+# auditd: record changes to SSH, sudo and local identities.
+# false = deploy the rules without starting auditd (used by the container-based tests).
+hardening_auditd_service: true
+
+# dnf-automatic installs security updates every day.
+hardening_security_updates: true

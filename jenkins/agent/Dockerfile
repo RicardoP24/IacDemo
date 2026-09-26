@@ -16,6 +16,8 @@ ARG HADOLINT_VERSION=2.15.1
 ARG KYVERNO_VERSION=1.19.1
 ARG CHECKOV_VERSION=3.3.19
 ARG SEMGREP_VERSION=1.178.0
+ARG ANSIBLE_CORE_VERSION=2.21.4
+ARG ANSIBLE_LINT_VERSION=26.9.0
 
 # sshd must start as root; builds run as the unprivileged "jenkins" user over SSH.
 # checkov:skip=CKV_DOCKER_8: sshd needs root; pipeline steps run as the jenkins user.
@@ -74,10 +76,12 @@ RUN curl -fsSLo awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_6
     && ./aws/install \
     && rm -rf /tmp/tools
 
-# Python-based scanners in an isolated virtualenv.
+# Python-based scanners and Ansible tooling in an isolated virtualenv.
 RUN python3 -m venv /opt/pytools \
     && /opt/pytools/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}" "semgrep==${SEMGREP_VERSION}" \
-    && ln -s /opt/pytools/bin/checkov /opt/pytools/bin/semgrep /usr/local/bin/
+        "ansible-core==${ANSIBLE_CORE_VERSION}" "ansible-lint==${ANSIBLE_LINT_VERSION}" \
+    && ln -s /opt/pytools/bin/checkov /opt/pytools/bin/semgrep /opt/pytools/bin/ansible \
+        /opt/pytools/bin/ansible-playbook /opt/pytools/bin/ansible-galaxy /opt/pytools/bin/ansible-lint /usr/local/bin/
 
 WORKDIR /home/jenkins
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
