@@ -1,0 +1,12 @@
+# -- Git repository Argo CD reads (public: no credentials).
+repoURL: https://github.com/RicardoP24/IacDemo.git
+
+# -- Branch Argo CD tracks. Changes reach it through pull requests whose pipeline gates passed.
+targetRevision: main
+
+# -- Tenant namespaces Argo CD may deploy to (created with their guardrails by Terraform).
+tenants: []
+
+# -- Values that come from the infrastructure (Terraform outputs), applied to every tenant:
+# imageRegistry, ingress.wafAclArn, networkPolicy.albSourceCidrs.
+platformValues: {}

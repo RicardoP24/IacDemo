@@ -1,0 +1,5 @@
+apiVersion: v2
+name: gitops
+description: Argo CD project and ApplicationSet that deliver the tenant workloads from Git
+type: application
+version: 0.1.0

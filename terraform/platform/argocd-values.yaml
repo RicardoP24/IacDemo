@@ -1,0 +1,27 @@
+# Argo CD (argo-cd Helm chart) values, used by argocd.tf.
+# Hardened for the demo: no public endpoint, no web terminal, read-only by default.
+
+global:
+  networkPolicy:
+    create: true
+    defaultDenyIngress: true # each component only accepts the traffic it needs
+
+configs:
+  cm:
+    admin.enabled: true # demo login; in production: OIDC SSO and admin disabled
+    exec.enabled: false # no web terminal into pods
+    statusbadge.enabled: false
+  rbac:
+    policy.default: role:readonly
+
+dex:
+  enabled: false # no SSO provider in the demo
+
+notifications:
+  enabled: false
+
+server:
+  service:
+    # Not exposed outside the cluster:
+    #   kubectl -n argocd port-forward svc/argocd-server 8443:443
+    type: ClusterIP

@@ -1,0 +1,61 @@
+{{- /*
+One Argo CD Application per file in tenants/: adding a client is one pull request.
+Values, lowest to highest priority:
+  tenants/<client>.yaml  ->  gitops/release.yaml (image digests, written by the pipeline)
+  ->  platformValues (registry, WAF, ALB subnets, from Terraform)
+A tenant file cannot move its workloads elsewhere: the AppProject only allows tenant namespaces.
+*/ -}}
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: {{ .Release.Namespace }}
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL | quote }}
+        revision: {{ .Values.targetRevision | quote }}
+        files:
+          - path: tenants/*.yaml
+  template:
+    metadata:
+      name: {{ "'{{ .tenant }}'" }}
+      labels:
+        app.kubernetes.io/part-of: iacdemo
+        iacdemo.io/tenant: {{ "'{{ .tenant }}'" }}
+      # Deleting the Application deletes its workloads (and, through the Ingress, the ALB rules).
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: tenants
+      source:
+        repoURL: {{ .Values.repoURL | quote }}
+        targetRevision: {{ .Values.targetRevision | quote }}
+        path: helm/tenant-app
+        helm:
+          releaseName: {{ "'{{ .tenant }}'" }}
+          valueFiles:
+            - {{ "'../../tenants/{{ .path.filename }}'" }}
+            - ../../gitops/release.yaml
+          {{- with .Values.platformValues }}
+          valuesObject:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ "'{{ .tenant }}'" }}
+      syncPolicy:
+        automated:
+          prune: true # resources removed from Git are removed from the cluster
+          selfHeal: true # manual changes (kubectl edit/delete) are reverted
+        syncOptions:
+          - CreateNamespace=false # namespaces come from Terraform, with their guardrails
+          - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

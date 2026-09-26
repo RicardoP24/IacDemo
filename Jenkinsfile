@@ -1,11 +1,15 @@
 // IacDemo: secure CI/CD for a multi-tenant EKS platform
 //
-//   secrets scan -> tests / SAST / SCA / IaC scan / policy tests -> build -> image scan + SBOM
-//   -> [main + approval] Terraform infra -> push + sign images -> Terraform platform
-//   -> Helm deploy (5 tenants x 2 apps) -> DAST + WAF smoke test
+//   secrets scan -> tests / SAST / SCA / IaC + Ansible scan / policy tests -> build -> image scan + SBOM
+//   -> [main + approval] Terraform infra -> push + sign images -> Terraform platform (incl. Argo CD)
+//   -> GitOps release commit (signed digests) -> Argo CD syncs 5 tenants x 2 apps -> DAST + WAF smoke test
+//
+// CI pushes, CD pulls: this pipeline never deploys workloads itself. It commits the release to
+// gitops/release.yaml and Argo CD, running inside the cluster, applies it.
 //
 // Jenkins configuration (Manage Jenkins):
-//   Credentials:        aws-iacdemo (AWS keys that can only sts:AssumeRole), cosign-key (file), cosign-password (text)
+//   Credentials:        aws-iacdemo (AWS keys that can only sts:AssumeRole), cosign-key (file), cosign-password (text),
+//                       github-release (username + fine-grained token: Contents read/write on this repository only)
 //   Global properties:  TF_STATE_BUCKET, CI_ROLE_ARN, EKS_PUBLIC_ACCESS_CIDRS (JSON list, e.g. ["203.0.113.10/32"])
 
 // Runs the body with short-lived credentials of the CI role (1h session).
@@ -61,6 +65,9 @@ pipeline {
         TF_VAR_eks_public_access_cidrs = "${env.EKS_PUBLIC_ACCESS_CIDRS}"
         SEVERITY    = 'HIGH,CRITICAL'
         DAST_TENANT = 'client-a'
+        RELEASE_FILE      = 'gitops/release.yaml'
+        RELEASE_BOT       = 'iacdemo-release-bot'
+        RELEASE_BOT_EMAIL = 'iacdemo-release-bot@users.noreply.github.com'
     }
 
     stages {
@@ -69,8 +76,20 @@ pipeline {
                 script {
                     env.IMAGE_TAG = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
                     env.ON_MAIN = (env.BRANCH_NAME == 'main').toString()
-                    env.DO_DEPLOY = (env.ON_MAIN == 'true' && params.DEPLOY && !params.DESTROY).toString()
+
+                    // The release commit pushed by this pipeline triggers a new build: skip it, or
+                    // every release would start another one. Only commits by the release bot that
+                    // touch nothing but the release file qualify.
+                    def author = sh(script: 'git log -1 --format=%ae', returnStdout: true).trim()
+                    def changed = sh(script: 'git diff --name-only HEAD~1 HEAD', returnStdout: true).trim()
+                    env.RELEASE_COMMIT = (author == env.RELEASE_BOT_EMAIL && changed == env.RELEASE_FILE).toString()
+                    if (env.RELEASE_COMMIT == 'true') {
+                        currentBuild.description = 'GitOps release commit: already built, nothing to do'
+                    }
+
+                    env.DO_DEPLOY = (env.ON_MAIN == 'true' && params.DEPLOY && !params.DESTROY && env.RELEASE_COMMIT != 'true').toString()
                     env.DO_DESTROY = (env.ON_MAIN == 'true' && params.DESTROY).toString()
+                    env.RUN_GATES = (env.DO_DESTROY != 'true' && env.RELEASE_COMMIT != 'true').toString()
                     if (env.DO_DEPLOY == 'true' || env.DO_DESTROY == 'true') {
                         ['TF_STATE_BUCKET', 'CI_ROLE_ARN', 'EKS_PUBLIC_ACCESS_CIDRS'].each { name ->
                             if (!env."${name}") {
@@ -84,7 +103,7 @@ pipeline {
         }
 
         stage('Secrets scan (Gitleaks)') {
-            when { expression { env.DO_DESTROY != 'true' } }
+            when { expression { env.RUN_GATES == 'true' } }
             steps {
                 // Whole git history, not just the current tree.
                 sh 'gitleaks git --no-banner --redact --report-format sarif --report-path reports/gitleaks.sarif .'
@@ -92,7 +111,7 @@ pipeline {
         }
 
         stage('Quality & security gates') {
-            when { expression { env.DO_DESTROY != 'true' } }
+            when { expression { env.RUN_GATES == 'true' } }
             parallel {
                 stage('Unit tests') {
                     steps {
@@ -150,7 +169,24 @@ pipeline {
                                 -o cli -o sarif --output-file-path console,reports/checkov-terraform
                             checkov --config-file .checkov.yaml -d reports/rendered --framework kubernetes \
                                 -o cli -o sarif --output-file-path console,reports/checkov-kubernetes
+                            checkov --config-file .checkov.yaml -d ansible --framework ansible \
+                                -o cli -o sarif --output-file-path console,reports/checkov-ansible
+
+                            # Argo CD project + ApplicationSet chart
+                            helm lint helm/gitops --set-json 'tenants=["client-a"]'
                         '''
+                    }
+                }
+
+                stage('Ansible lint') {
+                    steps {
+                        dir('ansible') {
+                            sh '''
+                                ansible-galaxy collection install -r requirements.yml
+                                ansible-lint --profile production --format sarif > ../reports/ansible-lint.sarif \
+                                    || { ansible-lint --profile production; exit 1; }
+                            '''
+                        }
                     }
                 }
 
@@ -182,7 +218,7 @@ pipeline {
         }
 
         stage('Build images') {
-            when { expression { env.DO_DESTROY != 'true' } }
+            when { expression { env.RUN_GATES == 'true' } }
             steps {
                 sh '''
                     for app in api web; do
@@ -194,7 +230,7 @@ pipeline {
         }
 
         stage('Image scan & SBOM') {
-            when { expression { env.DO_DESTROY != 'true' } }
+            when { expression { env.RUN_GATES == 'true' } }
             steps {
                 sh '''
                     for app in api web; do
@@ -297,28 +333,79 @@ pipeline {
             }
         }
 
-        stage('Deploy tenants (Helm)') {
+        stage('Release (GitOps commit)') {
+            when { expression { env.DO_DEPLOY == 'true' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-release',
+                                                  usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh '''
+                        # The desired state for every tenant: the signed digests built by this run.
+                        cat > "$RELEASE_FILE" <<EOF
+# The release every tenant runs. Written only by the Jenkins pipeline ("Release (GitOps
+# commit)" stage), after the images have passed every gate and been pushed and signed.
+# Argo CD deploys exactly these digests; rolling back is a git revert of the commit.
+appVersion: "$IMAGE_TAG"
+api:
+  image:
+    digest: "$(cat reports/api.digest)"
+web:
+  image:
+    digest: "$(cat reports/web.digest)"
+EOF
+                        git add "$RELEASE_FILE"
+                        if git diff --cached --quiet; then
+                            echo "Release unchanged: these digests are already deployed"
+                        else
+                            git -c user.name="$RELEASE_BOT" -c user.email="$RELEASE_BOT_EMAIL" \
+                                commit --quiet -m "release: $IMAGE_TAG [skip ci]" -m "Build $BUILD_URL"
+                            # The token reaches git through a credential helper, never the command line or the logs.
+                            for attempt in 1 2 3; do
+                                git -c credential.helper= \
+                                    -c credential.helper='!f() { echo "username=$GIT_USER"; echo "password=$GIT_TOKEN"; }; f' \
+                                    push origin HEAD:main && break
+                                [ "$attempt" = 3 ] && exit 1
+                                git pull --rebase --quiet origin main   # main moved: replay the release on top
+                            done
+                        fi
+                        git rev-parse HEAD > reports/release.sha
+                        echo "Release commit: $(cat reports/release.sha)"
+                    '''
+                }
+            }
+        }
+
+        stage('Argo CD sync') {
             when { expression { env.DO_DEPLOY == 'true' } }
             steps {
                 script {
                     withAwsRole {
                         sh '''
                             aws eks update-kubeconfig --name "$(terraform -chdir=terraform/infra output -raw cluster_name)"
-                            REGISTRY=$(terraform -chdir=terraform/infra output -raw ecr_registry)
-                            WAF_ACL_ARN=$(terraform -chdir=terraform/infra output -raw waf_acl_arn)
-                            ALB_CIDRS=$(terraform -chdir=terraform/infra output -json public_subnet_cidrs)
+                            RELEASE=$(cat reports/release.sha)
+                            deadline=$(( $(date +%s) + 900 ))
 
                             for values in tenants/*.yaml; do
-                                tenant=$(basename "$values" .yaml)
-                                echo "--- deploying $tenant"
-                                helm upgrade --install "$tenant" helm/tenant-app --namespace "$tenant" -f "$values" \
-                                    --set imageRegistry="$REGISTRY" \
-                                    --set appVersion="$IMAGE_TAG" \
-                                    --set api.image.digest="$(cat reports/api.digest)" \
-                                    --set web.image.digest="$(cat reports/web.digest)" \
-                                    --set ingress.wafAclArn="$WAF_ACL_ARN" \
-                                    --set-json "networkPolicy.albSourceCidrs=$ALB_CIDRS" \
-                                    --rollback-on-failure --wait --timeout 10m
+                                app=$(basename "$values" .yaml)
+                                until kubectl -n argocd get application "$app" >/dev/null 2>&1; do
+                                    [ "$(date +%s)" -lt "$deadline" ] || { echo "Application $app was not generated"; exit 1; }
+                                    sleep 5
+                                done
+                                # Read Git now instead of waiting for the next polling cycle.
+                                kubectl -n argocd annotate application "$app" argocd.argoproj.io/refresh=normal --overwrite
+                            done
+
+                            for values in tenants/*.yaml; do
+                                app=$(basename "$values" .yaml)
+                                until [ "$(kubectl -n argocd get application "$app" \
+                                        -o jsonpath='{.status.sync.revision} {.status.sync.status} {.status.health.status}')" \
+                                        = "$RELEASE Synced Healthy" ]; do
+                                    if [ "$(date +%s)" -ge "$deadline" ]; then
+                                        kubectl -n argocd get applications -o wide
+                                        echo "Argo CD did not converge on $RELEASE"; exit 1
+                                    fi
+                                    sleep 10
+                                done
+                                echo "$app: Synced and Healthy at ${RELEASE}"
                             done
                             kubectl get pods -A -l app.kubernetes.io/part-of=iacdemo
                         '''
@@ -367,11 +454,11 @@ pipeline {
                         tfInit('infra')
                         tfInit('platform')
                         sh '''
-                            # 1. Tenants first: the load balancer controller deletes the shared ALB.
+                            # 1. Tenants first. Deleting the ApplicationSet deletes the Applications, whose
+                            #    finalizer deletes the workloads; the load balancer controller then removes the ALB.
                             if aws eks update-kubeconfig --name "$(terraform -chdir=terraform/infra output -raw cluster_name)"; then
-                                for values in tenants/*.yaml; do
-                                    helm uninstall "$(basename "$values" .yaml)" --namespace "$(basename "$values" .yaml)" --wait || true
-                                done
+                                kubectl -n argocd delete applicationset tenants --ignore-not-found --wait=true --timeout=5m || true
+                                kubectl -n argocd wait --for=delete applications -l app.kubernetes.io/part-of=iacdemo --timeout=10m || true
                                 sleep 60
                             fi
                             # 2. Platform add-ons, 3. infrastructure.

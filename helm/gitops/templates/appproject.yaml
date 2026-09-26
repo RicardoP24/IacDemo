@@ -1,0 +1,30 @@
+{{- /*
+Least privilege for delivery: Argo CD may only apply the kinds the tenant chart
+contains, only into tenant namespaces, and never cluster-scoped objects. Namespaces,
+quotas, limit ranges, default-deny policies and RBAC stay with Terraform.
+*/ -}}
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tenants
+  namespace: {{ .Release.Namespace }}
+spec:
+  description: Tenant workloads (web + api), one namespace per client
+  sourceRepos:
+    - {{ required "repoURL is required" .Values.repoURL | quote }}
+  destinations:
+    {{- range required "tenants is required" .Values.tenants }}
+    - server: https://kubernetes.default.svc
+      namespace: {{ . | quote }}
+    {{- end }}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - { group: "", kind: ServiceAccount }
+    - { group: "", kind: Service }
+    - { group: apps, kind: Deployment }
+    - { group: autoscaling, kind: HorizontalPodAutoscaler }
+    - { group: policy, kind: PodDisruptionBudget }
+    - { group: networking.k8s.io, kind: Ingress }
+    - { group: networking.k8s.io, kind: NetworkPolicy }
+  orphanedResources:
+    warn: true

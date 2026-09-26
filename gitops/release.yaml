@@ -1,0 +1,10 @@
+# The release every tenant runs. Written only by the Jenkins pipeline ("Release (GitOps
+# commit)" stage), after the images have passed every gate and been pushed and signed.
+# Argo CD deploys exactly these digests; rolling back is a `git revert` of the commit.
+appVersion: dev
+api:
+  image:
+    digest: ""
+web:
+  image:
+    digest: ""

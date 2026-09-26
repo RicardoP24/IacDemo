@@ -54,17 +54,31 @@ variable "falco_response_actions" {
   default     = true
 }
 
+variable "gitops_repo_url" {
+  description = "Git repository Argo CD reads the tenant workloads and the release from."
+  type        = string
+  default     = "https://github.com/RicardoP24/IacDemo.git"
+}
+
+variable "gitops_revision" {
+  description = "Branch Argo CD tracks."
+  type        = string
+  default     = "main"
+}
+
 variable "chart_versions" {
   type = object({
     aws_load_balancer_controller = string
     metrics_server               = string
     kyverno                      = string
     falco                        = string
+    argocd                       = string
   })
   default = {
     aws_load_balancer_controller = "3.5.0"
     metrics_server               = "3.14.0"
     kyverno                      = "3.9.1"
     falco                        = "9.2.0"
+    argocd                       = "10.9.2" # Argo CD v3.5.3
   }
 }
